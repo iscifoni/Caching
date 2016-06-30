@@ -9,7 +9,6 @@ namespace Microsoft.Extensions.Caching.Memory
 {
     public static class CacheExtensions
     {
-
         public static object Get(this IMemoryCache cache, object key)
         {
             object value = null;
@@ -123,6 +122,30 @@ namespace Microsoft.Extensions.Caching.Memory
             }
 
             return (TItem)result;
+        }
+
+        public static TItem GetWeak<TItem>(this IMemoryCache cache, object key) where TItem : class
+        {
+            WeakReference<TItem> reference;
+            if (cache.TryGetValue<WeakReference<TItem>>(key, out reference))
+            {
+                TItem value;
+                reference.TryGetTarget(out value);
+                return value;
+            }
+            return null;
+        }
+
+        public static TItem SetWeak<TItem>(this IMemoryCache cache, object key, TItem value) where TItem : class
+        {
+            using (var entry = cache.CreateEntry(key))
+            {
+                var reference = new WeakReference<TItem>(value);
+                entry.AddExpirationToken(new WeakToken<TItem>(reference));
+                entry.Value = reference;
+            }
+
+            return value;
         }
     }
 }
