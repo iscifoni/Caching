@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Internal;
-using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace Microsoft.Extensions.Caching.SqlServer
@@ -119,7 +118,7 @@ namespace Microsoft.Extensions.Caching.SqlServer
             var expectedValue = Encoding.UTF8.GetBytes("Hello, World!");
             var cacheOptions = GetCacheOptions(testClock);
             var sqlServerCache = GetCache(cacheOptions);
-            var expectedExpirationTime = testClock.UtcNow.Add(cacheOptions.DefaultCacheEntryOptions.SlidingExpiration.Value);
+            var expectedExpirationTime = testClock.UtcNow.Add(cacheOptions.DefaultSlidingExpiration);
 
             // Act
             await sqlServerCache.SetAsync(key, expectedValue, options: null);
@@ -129,7 +128,7 @@ namespace Microsoft.Extensions.Caching.SqlServer
                             sqlServerCache,
                             key,
                             expectedValue,
-                            cacheOptions.DefaultCacheEntryOptions.SlidingExpiration,
+                            cacheOptions.DefaultSlidingExpiration,
                             absoluteExpiration: null,
                             expectedExpirationTime: expectedExpirationTime);
 
@@ -153,7 +152,7 @@ namespace Microsoft.Extensions.Caching.SqlServer
             var expectedValue = Encoding.UTF8.GetBytes("Hello, World!");
             var cacheOptions = GetCacheOptions(testClock);
             var sqlServerCache = GetCache(cacheOptions);
-            var expectedExpirationTime = testClock.UtcNow.Add(cacheOptions.DefaultCacheEntryOptions.SlidingExpiration.Value);
+            var expectedExpirationTime = testClock.UtcNow.Add(cacheOptions.DefaultSlidingExpiration);
 
             // Act
             await sqlServerCache.SetAsync(key, expectedValue, new DistributedCacheEntryOptions()
@@ -168,7 +167,47 @@ namespace Microsoft.Extensions.Caching.SqlServer
                             sqlServerCache,
                             key,
                             expectedValue,
-                            cacheOptions.DefaultCacheEntryOptions.SlidingExpiration,
+                            cacheOptions.DefaultSlidingExpiration,
+                            absoluteExpiration: null,
+                            expectedExpirationTime: expectedExpirationTime);
+
+            var cacheItem = await GetCacheItemFromDatabaseAsync(key);
+            Assert.Equal(expectedValue, cacheItem.Value);
+
+            // Act
+            await sqlServerCache.RemoveAsync(key);
+
+            // Assert
+            var cacheItemInfo = await GetCacheItemFromDatabaseAsync(key);
+            Assert.Null(cacheItemInfo);
+        }
+
+        [Fact]
+        public async Task UpdatedDefaultSlidingExpiration_SetCacheItem_SucceedsFor_NullAbsoluteAndSlidingExpirationTimes()
+        {
+            // Arrange
+            var key = Guid.NewGuid().ToString();
+            var testClock = new TestClock();
+            var expectedValue = Encoding.UTF8.GetBytes("Hello, World!");
+            var cacheOptions = GetCacheOptions(testClock);
+            cacheOptions.DefaultSlidingExpiration = cacheOptions.DefaultSlidingExpiration.Add(TimeSpan.FromMinutes(10));
+            var sqlServerCache = GetCache(cacheOptions);
+            var expectedExpirationTime = testClock.UtcNow.Add(cacheOptions.DefaultSlidingExpiration);
+
+            // Act
+            await sqlServerCache.SetAsync(key, expectedValue, new DistributedCacheEntryOptions()
+            {
+                AbsoluteExpiration = null,
+                AbsoluteExpirationRelativeToNow = null,
+                SlidingExpiration = null
+            });
+
+            // Assert
+            await AssertGetCacheItemFromDatabaseAsync(
+                            sqlServerCache,
+                            key,
+                            expectedValue,
+                            cacheOptions.DefaultSlidingExpiration,
                             absoluteExpiration: null,
                             expectedExpirationTime: expectedExpirationTime);
 
