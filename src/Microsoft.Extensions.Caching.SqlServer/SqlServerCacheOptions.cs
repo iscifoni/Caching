@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Internal;
 using Microsoft.Extensions.Options;
 
@@ -12,6 +13,14 @@ namespace Microsoft.Extensions.Caching.SqlServer
     /// </summary>
     public class SqlServerCacheOptions : IOptions<SqlServerCacheOptions>
     {
+        public SqlServerCacheOptions()
+        {
+            DefaultCacheEntryOptions = new DistributedCacheEntryOptions()
+            {
+                SlidingExpiration = TimeSpan.FromMinutes(20)
+            };
+        }
+
         /// <summary>
         /// An abstraction to represent the clock of a machine in order to enable unit testing.
         /// </summary>
@@ -36,6 +45,11 @@ namespace Microsoft.Extensions.Caching.SqlServer
         /// Name of the table where the cache items are stored.
         /// </summary>
         public string TableName { get; set; }
+
+        /// <summary>
+        /// The default options for a new cache entry. It has SlidingExpiration set for 20 minutes by default.
+        /// </summary>
+        public DistributedCacheEntryOptions DefaultCacheEntryOptions { get; set; }
 
         SqlServerCacheOptions IOptions<SqlServerCacheOptions>.Value
         {

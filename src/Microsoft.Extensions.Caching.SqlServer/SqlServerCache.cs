@@ -22,6 +22,7 @@ namespace Microsoft.Extensions.Caching.SqlServer
         private readonly TimeSpan _expiredItemsDeletionInterval;
         private DateTimeOffset _lastExpirationScan;
         private readonly Action _deleteExpiredCachedItemsDelegate;
+        private readonly DistributedCacheEntryOptions _defaultCacheEntryOptions;
 
         public SqlServerCache(IOptions<SqlServerCacheOptions> options)
         {
@@ -49,11 +50,24 @@ namespace Microsoft.Extensions.Caching.SqlServer
                     $"{nameof(SqlServerCacheOptions.ExpiredItemsDeletionInterval)} cannot be less the minimum " +
                     $"value of {MinimumExpiredItemsDeletionInterval.TotalMinutes} minutes.");
             }
+            if (cacheOptions.DefaultCacheEntryOptions == null)
+            {
+                throw new ArgumentException(
+                    $"{nameof(SqlServerCacheOptions.DefaultCacheEntryOptions)} cannot be null.");
+            }
+            if (!cacheOptions.DefaultCacheEntryOptions.AbsoluteExpiration.HasValue
+                && !cacheOptions.DefaultCacheEntryOptions.AbsoluteExpirationRelativeToNow.HasValue
+                && !cacheOptions.DefaultCacheEntryOptions.SlidingExpiration.HasValue)
+            {
+                throw new ArgumentException(
+                    $"Either absolute or sliding expiration needs to be provided for {nameof(SqlServerCacheOptions.DefaultCacheEntryOptions)}");
+            }
 
             _systemClock = cacheOptions.SystemClock ?? new SystemClock();
             _expiredItemsDeletionInterval =
                 cacheOptions.ExpiredItemsDeletionInterval ?? DefaultExpiredItemsDeletionInterval;
             _deleteExpiredCachedItemsDelegate = DeleteExpiredCacheItems;
+            _defaultCacheEntryOptions = cacheOptions.DefaultCacheEntryOptions;
 
             // SqlClient library on Mono doesn't have support for DateTimeOffset and also
             // it doesn't have support for apis like GetFieldValue, GetFieldValueAsync etc.
@@ -164,10 +178,7 @@ namespace Microsoft.Extensions.Caching.SqlServer
                 throw new ArgumentNullException(nameof(value));
             }
 
-            if (options == null)
-            {
-                throw new ArgumentNullException(nameof(options));
-            }
+            GetOptions(ref options);
 
             _dbOperations.SetCacheItem(key, value, options);
 
@@ -189,10 +200,7 @@ namespace Microsoft.Extensions.Caching.SqlServer
                 throw new ArgumentNullException(nameof(value));
             }
 
-            if (options == null)
-            {
-                throw new ArgumentNullException(nameof(options));
-            }
+            GetOptions(ref options);
 
             await _dbOperations.SetCacheItemAsync(key, value, options);
 
@@ -215,6 +223,22 @@ namespace Microsoft.Extensions.Caching.SqlServer
         private void DeleteExpiredCacheItems()
         {
             _dbOperations.DeleteExpiredCacheItems();
+        }
+
+        private void GetOptions(ref DistributedCacheEntryOptions options)
+        {
+            if (options == null ||
+                (!options.AbsoluteExpiration.HasValue
+                && !options.AbsoluteExpirationRelativeToNow.HasValue
+                && !options.SlidingExpiration.HasValue))
+            {
+                options = new DistributedCacheEntryOptions()
+                {
+                    AbsoluteExpiration = _defaultCacheEntryOptions.AbsoluteExpiration,
+                    SlidingExpiration = _defaultCacheEntryOptions.SlidingExpiration,
+                    AbsoluteExpirationRelativeToNow = _defaultCacheEntryOptions.AbsoluteExpirationRelativeToNow
+                };
+            }
         }
     }
 }
